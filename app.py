@@ -4,46 +4,48 @@ import yt_dlp
 app = Flask(__name__)
 
 def get_video_info(url):
-    # Instagram App User-Agent (Taaki server ko lage mobile app se request aayi hai)
-    mobile_user_agent = 'Instagram 219.0.0.12.117 Android (30/11; 320dpi; 1080x1920; samsung; SM-G960F; starlte; samsungexynos9810; en_US; 273667793)'
-    
+    # Render par FFmpeg nahi hota, isliye hum 'best' format
+    # wo mangenge jisme Audio+Video pehle se mixed ho.
     ydl_opts = {
-        'format': 'best',
+        'format': 'best[ext=mp4]/best',  # MP4 format prefer karo
         'quiet': True,
         'no_warnings': True,
         'geo_bypass': True,
         'nocheckcertificate': True,
-        'extract_flat': False, # Pura data extract karo
         
-        # Yahan humne "Samsung Phone" wali ID lagayi hai
+        # Fake User-Agent (YouTube/Insta ko lagega PC hai)
         'http_headers': {
-            'User-Agent': mobile_user_agent,
-            'Accept': '*/*',
-            'Accept-Language': 'en-US',
-            'Sec-Fetch-Mode': 'navigate',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Video info extract karo
+            # Info extract karo (Download False rakhna hai)
             info = ydl.extract_info(url, download=False)
+            
+            # YouTube Shorts kabhi-kabhi formats list mein hote hain
+            download_url = info.get('url')
+            
+            # Agar direct URL nahi mila, to formats mein se dhundo
+            if not download_url:
+                formats = info.get('formats', [])
+                for f in formats:
+                    # Wo format dhundo jisme video aur audio dono ho (acodec != none)
+                    if f.get('ext') == 'mp4' and f.get('acodec') != 'none':
+                        download_url = f.get('url')
+                        break
             
             return {
                 "status": "success",
-                "title": info.get('title', 'Instagram Reel'),
+                "title": info.get('title', 'Video Download'),
                 "thumbnail": info.get('thumbnail'),
-                "download_url": info.get('url')
+                "download_url": download_url
             }
+            
     except Exception as e:
-        error_msg = str(e)
-        # Agar fir bhi error aaye, toh user ko saaf batao
-        if "Login required" in error_msg or "rate-limit" in error_msg:
-            return {
-                "status": "error", 
-                "message": "Instagram Security High hai. Server IP Blocked. Please try YouTube/Twitter link."
-            }
-        return {"status": "error", "message": "Link expire ho gaya hai ya private hai."}
+        # Error ka asli reason user ko dikhao
+        return {"status": "error", "message": str(e)}
 
 @app.route('/')
 def home():
@@ -55,13 +57,8 @@ def download():
     url = data.get('url')
     
     if not url:
-        return jsonify({"status": "error", "message": "Link kahan hai?"})
+        return jsonify({"status": "error", "message": "Link missing!"})
     
-    result = get_video_info(url)
-    return jsonify(result)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)    
     result = get_video_info(url)
     return jsonify(result)
 

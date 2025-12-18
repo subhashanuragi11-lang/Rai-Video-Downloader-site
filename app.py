@@ -4,39 +4,46 @@ import yt_dlp
 app = Flask(__name__)
 
 def get_video_info(url):
-    # Instagram ko dhoka dene ke liye Fake Browser Headers
+    # Instagram App User-Agent (Taaki server ko lage mobile app se request aayi hai)
+    mobile_user_agent = 'Instagram 219.0.0.12.117 Android (30/11; 320dpi; 1080x1920; samsung; SM-G960F; starlte; samsungexynos9810; en_US; 273667793)'
+    
     ydl_opts = {
         'format': 'best',
         'quiet': True,
         'no_warnings': True,
         'geo_bypass': True,
         'nocheckcertificate': True,
-        # Yahan hum bata rahe hain ki hum Windows PC se aaye hain
+        'extract_flat': False, # Pura data extract karo
+        
+        # Yahan humne "Samsung Phone" wali ID lagayi hai
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
+            'User-Agent': mobile_user_agent,
+            'Accept': '*/*',
+            'Accept-Language': 'en-US',
             'Sec-Fetch-Mode': 'navigate',
         }
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # download=False server par load kam karne ke liye
+            # Video info extract karo
             info = ydl.extract_info(url, download=False)
             
             return {
                 "status": "success",
-                "title": info.get('title', 'Video Download'),
+                "title": info.get('title', 'Instagram Reel'),
                 "thumbnail": info.get('thumbnail'),
                 "download_url": info.get('url')
             }
     except Exception as e:
-        # Agar error aaye to clean message bhejo
         error_msg = str(e)
-        if "Login required" in error_msg:
-            return {"status": "error", "message": "Instagram ne server IP block kiya hai. Kripya dusri video try karein."}
-        return {"status": "error", "message": error_msg}
+        # Agar fir bhi error aaye, toh user ko saaf batao
+        if "Login required" in error_msg or "rate-limit" in error_msg:
+            return {
+                "status": "error", 
+                "message": "Instagram Security High hai. Server IP Blocked. Please try YouTube/Twitter link."
+            }
+        return {"status": "error", "message": "Link expire ho gaya hai ya private hai."}
 
 @app.route('/')
 def home():
@@ -48,21 +55,13 @@ def download():
     url = data.get('url')
     
     if not url:
-        return jsonify({"status": "error", "message": "No URL provided"})
+        return jsonify({"status": "error", "message": "Link kahan hai?"})
     
     result = get_video_info(url)
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-@app.route('/get-video', methods=['POST'])
-def download():
-    data = request.get_json()
-    url = data.get('url')
-    
-    if not url:
-        return jsonify({"status": "error", "message": "No URL provided"})
-    
+    app.run(host='0.0.0.0', port=5000)    
     result = get_video_info(url)
     return jsonify(result)
 
